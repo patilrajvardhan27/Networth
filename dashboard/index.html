@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>natctl console</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="nav">
+    <a class="logo" href="#top">natctl</a>
+    <nav aria-label="Sections">
+      <a class="active" href="#stats">Stats</a>
+      <a href="#console">Translations</a>
+      <a href="/api/show">Raw show</a>
+    </nav>
+    <a class="btn primary" href="#console">Open console <span aria-hidden="true">&rarr;</span></a>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <span class="sprite cloud-a" data-sprite="cloud" data-scale="5"></span>
+      <span class="sprite cloud-b" data-sprite="cloud" data-scale="4"></span>
+      <h1>Every packet<br><em>finds its way home.</em></h1>
+      <p>A userspace PAT engine written in Rust. Watch live translations as clients hide behind a small pool of public addresses.</p>
+      <a class="btn primary big" href="#console">View translations <span aria-hidden="true">&rarr;</span></a>
+    </section>
+
+    <section id="stats" class="cards">
+      <article class="card"><span data-sprite="table" data-scale="5"></span><h2>Active</h2><strong id="s-active">0</strong><p>live mappings</p></article>
+      <article class="card"><span data-sprite="up" data-scale="5"></span><h2>Outbound</h2><strong id="s-out">0</strong><p>packets rewritten</p></article>
+      <article class="card"><span data-sprite="down" data-scale="5"></span><h2>Inbound</h2><strong id="s-in">0</strong><p>replies returned</p></article>
+      <article class="card"><span data-sprite="shield" data-scale="5"></span><h2>Dropped</h2><strong id="s-drop">0</strong><p>unsolicited or invalid</p></article>
+    </section>
+
+    <section id="console" class="window" aria-label="Live console">
+      <div class="chrome"><i class="dot r"></i><i class="dot y"></i><i class="dot g"></i><span>natctl &mdash; live table</span></div>
+      <div class="body">
+        <aside>
+          <span class="sprite" data-sprite="cat" data-scale="4"></span>
+          <button class="tab on" data-tab="translations">Translations</button>
+          <button class="tab" data-tab="pool">Pool</button>
+          <button class="tab" data-tab="timeouts">Timeouts</button>
+        </aside>
+        <div class="panel">
+          <div class="status"><span id="pill" class="pill ok"><span data-sprite="check" data-scale="2"></span><b>Translating</b></span><span id="status-text">waiting for data</span></div>
+          <div class="scroll" id="translations"></div>
+          <div class="scroll" id="pool" hidden></div>
+          <div class="scroll" id="timeouts" hidden></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span class="sprite" data-sprite="cat" data-scale="3"></span>
+    <p>natctl &middot; Rust NAT/PAT &middot; documentation ranges only (198.51.100.0/27, 172.16.10.0/24)</p>
+  </footer>
+  <script src="/pixel.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

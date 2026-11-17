@@ -25,7 +25,7 @@ pub async fn replicate<C: Clock + Send + 'static>(
         beats = beats.wrapping_add(1);
         let deltas = {
             let mut n = nat.lock().unwrap();
-            if beats % RESYNC_EVERY == 0 {
+            if beats.is_multiple_of(RESYNC_EVERY) {
                 n.table_mut().mark_all_dirty();
             }
             n.drain_deltas()

@@ -1,0 +1,16 @@
+[package]
+name = "natctl"
+description = "Userspace NAT/PAT router over TUN devices with a live admin console"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+nat-core.workspace = true
+nat-sync.workspace = true
+packet.workspace = true
+tokio.workspace = true
+clap.workspace = true
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tun-rs = { version = "2", default-features = false, features = ["async"] }
