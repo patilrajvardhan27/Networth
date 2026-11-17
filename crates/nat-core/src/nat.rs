@@ -47,6 +47,10 @@ impl<C: Clock> Nat<C> {
     pub fn table(&self) -> &Table {
         &self.table
     }
+    // Lent out the table for replication to write into.
+    pub fn table_mut(&mut self) -> &mut Table {
+        &mut self.table
+    }
     // Lent out the pool for display.
     pub fn pool(&self) -> &Pool {
         &self.pool

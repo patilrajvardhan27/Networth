@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/packet", "crates/nat-core"]
+members = ["crates/packet", "crates/nat-core", "crates/nat-sync"]
 
 [workspace.package]
 version = "0.1.0"

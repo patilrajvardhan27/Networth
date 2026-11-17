@@ -1,0 +1,14 @@
+[package]
+name = "nat-sync"
+description = "UDP replication of NAT table deltas between an active and a standby instance"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+nat-core.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+packet.workspace = true
