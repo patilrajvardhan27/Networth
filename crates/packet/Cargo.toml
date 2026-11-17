@@ -1,0 +1,10 @@
+[package]
+name = "packet"
+description = "Zero-dependency IPv4/IPv6/TCP/UDP/ICMP parsing with RFC 1624 checksum updates"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dev-dependencies]
+proptest = "1"
+etherparse = "0.17"

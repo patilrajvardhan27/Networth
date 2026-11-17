@@ -1,0 +1,22 @@
+[workspace]
+resolver = "2"
+members = ["crates/packet"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+rust-version = "1.80"
+
+[workspace.dependencies]
+packet = { path = "crates/packet" }
+nat-core = { path = "crates/nat-core" }
+nat-sync = { path = "crates/nat-sync" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "io-util", "signal", "sync"] }
+clap = { version = "4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
