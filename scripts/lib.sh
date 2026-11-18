@@ -27,9 +27,11 @@ nat_routes() {
   await_link "$n" in0 && await_link "$n" out0 || { log "tun devices never appeared in $n"; return 1; }
   ns "$n" ip route add "$INSIDE" via "$client_gw"
   ns "$n" ip route add "$SERVER_NET" dev in0
+  ns "$n" ip route add "$EXEMPT_NET" dev in0
   ns "$n" ip route add "$POOL" dev out0
   ns "$n" ip rule add iif out0 lookup 100
   ns "$n" ip route add "$SERVER_NET" via "$server_gw" table 100
+  ns "$n" ip route add "$EXEMPT_NET" via "$server_gw" table 100
 }
 
 # Started one translator, optionally as the active or the standby side of a sync pair.
@@ -57,6 +59,7 @@ start_servers() { # workdir
   local probe=$ROOT/scripts/probe.py
   bg ns-server python3 "$probe" tcp-whoami "$SERVER_IP" "$HTTP_PORT"
   bg ns-server python3 "$probe" udp-echo "$SERVER_IP" "$UDP_PORT"
+  bg ns-server python3 "$probe" udp-echo "$EXEMPT_IP" "$UDP_PORT"
   bg ns-server python3 "$probe" stream-server "$SERVER_IP" "$STREAM_PORT"
   bg ns-server python3 "$probe" dns-stub 127.0.0.1 5353
   bg ns-server openssl s_server -quiet -www -accept "$SERVER_IP:$TLS_PORT" -cert "$1/cert.pem" -key "$1/key.pem"

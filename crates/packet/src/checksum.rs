@@ -2,9 +2,9 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 
 // Added up every sixteen bit word and tucked a lone last byte in as its own.
 pub fn sum(data: &[u8]) -> u64 {
-    let mut words = data.chunks_exact(2);
-    let mut acc: u64 = words.by_ref().map(|w| u64::from(u16::from_be_bytes([w[0], w[1]]))).sum();
-    if let [last] = words.remainder() {
+    let (words, rest) = data.as_chunks::<2>();
+    let mut acc: u64 = words.iter().map(|w| u64::from(u16::from_be_bytes(*w))).sum();
+    if let [last] = rest {
         acc += u64::from(*last) << 8;
     }
     acc
@@ -40,10 +40,9 @@ pub fn pseudo_v6(src: Ipv6Addr, dst: Ipv6Addr, next: u8, len: usize) -> u64 {
 
 // Patched a checksum for swapped words the RFC 1624 way, never rescanning the packet.
 pub fn update(ck: u16, old: &[u8], new: &[u8]) -> u16 {
-    let word = |b: &[u8]| u64::from(u16::from_be_bytes([b[0], b[1]]));
     let mut acc = u64::from(!ck);
-    for (o, n) in old.chunks_exact(2).zip(new.chunks_exact(2)) {
-        acc += u64::from(!(word(o) as u16)) + word(n);
+    for (o, n) in old.as_chunks::<2>().0.iter().zip(new.as_chunks::<2>().0) {
+        acc += u64::from(!u16::from_be_bytes(*o)) + u64::from(u16::from_be_bytes(*n));
     }
     fold(acc)
 }

@@ -6,13 +6,14 @@ import threading
 import time
 
 
-# Printed what the server saw so tests could check the source was translated.
+# Reported the peer address and negotiated MSS so tests could check translation and clamping.
 def tcp_whoami(host, port):
     srv = socket.create_server((host, int(port)), reuse_port=True)
     while True:
         conn, peer = srv.accept()
         conn.recv(4096)
-        conn.sendall(f"HTTP/1.0 200 OK\r\n\r\npeer={peer[0]}:{peer[1]}\n".encode())
+        mss = conn.getsockopt(socket.IPPROTO_TCP, socket.TCP_MAXSEG)
+        conn.sendall(f"HTTP/1.0 200 OK\r\n\r\npeer={peer[0]}:{peer[1]} mss={mss}\n".encode())
         conn.close()
 
 

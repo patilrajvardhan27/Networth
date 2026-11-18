@@ -3,10 +3,10 @@ name = "dnsfwd"
 description = "Small UDP DNS forwarder with a TTL cache"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-hickory-proto = { version = "0.25", default-features = false }
 tokio.workspace = true
 clap.workspace = true
 tracing.workspace = true

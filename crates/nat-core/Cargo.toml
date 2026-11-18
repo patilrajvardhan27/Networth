@@ -3,6 +3,7 @@ name = "nat-core"
 description = "Pure stateful PAT, ACL and reflexive filtering with an injected clock and no I/O"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 
 [dependencies]

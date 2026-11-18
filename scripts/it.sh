@@ -22,6 +22,16 @@ tcp_through_nat() { ns ns-client curl -fsS --max-time 5 "http://$SERVER_IP:$HTTP
 # Sent a datagram and expected the echo to name a pool address as the sender.
 udp_through_nat() { ns ns-client python3 "$PROBE" udp-client "$SERVER_IP" "$UDP_PORT" | grep -Eq "^198\.51\.100\."; }
 
+# Read the MSS the server negotiated and expected it to sit at or under the clamp.
+mss_is_clamped() {
+  local mss
+  mss=$(ns ns-client curl -fsS --max-time 5 "http://$SERVER_IP:$HTTP_PORT/" | sed -n 's/.*mss=//p')
+  [ -n "$mss" ] && [ "$mss" -le 1400 ]
+}
+
+# Sent to an inside prefix the ACL exempts and expected the server to see the untranslated source.
+acl_bypass_skips_translation() { ns ns-client python3 "$PROBE" udp-client "$EXEMPT_IP" "$UDP_PORT" | grep -Eq "^172\.16\.10\.2:"; }
+
 # Pinged the server and expected two replies.
 icmp_through_nat() { ns ns-client ping -c 2 -W 2 "$SERVER_IP" >/dev/null; }
 
@@ -56,6 +66,8 @@ start_servers "$WORK"
 check "tcp through nat" tcp_through_nat
 check "udp through nat" udp_through_nat
 check "icmp through nat" icmp_through_nat
+check "mss is clamped on the handshake" mss_is_clamped
+check "acl exemption skips translation" acl_bypass_skips_translation
 check "tls through nat" tls_through_nat
 check "dns through nat" dns_through_nat
 check "natctl show lists the flows" show_lists_pool

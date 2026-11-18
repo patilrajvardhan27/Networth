@@ -27,7 +27,9 @@ up() {
   ns ns-client ip addr add "$CLIENT_IP/32" dev lo
   ns ns-client ip route add default via "$CA_NAT" dev ca src "$CLIENT_IP"
   ns ns-server ip addr add "$SERVER_IP/32" dev lo
+  ns ns-server ip addr add "$EXEMPT_IP/32" dev lo
   ns ns-server ip route add "$POOL" via "$SA_NAT" dev sa
+  ns ns-server ip route add "$INSIDE" via "$SA_NAT" dev sa
   for n in client nat nat2 server; do
     ns "ns-$n" sysctl -qw net.ipv4.conf.all.rp_filter=0 net.ipv4.conf.default.rp_filter=0
   done
