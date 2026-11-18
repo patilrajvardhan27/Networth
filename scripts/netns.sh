@@ -27,6 +27,12 @@ up() {
   ns ns-client ip addr add "$CLIENT_IP/32" dev lo
   ns ns-client ip route add default via "$CA_NAT" dev ca src "$CLIENT_IP"
   ns ns-server ip addr add "$SERVER_IP/32" dev lo
+  if [ "$IPV6" = 1 ]; then
+    ns ns-client ip -6 addr add "$CLIENT_IP6/128" dev lo
+    ns ns-client ip -6 addr add "$CA6_CLIENT/126" dev ca nodad
+    ns ns-nat ip -6 addr add "$CA6_NAT/126" dev na-c nodad
+    ns ns-client ip -6 route add "$NAT64_PREFIX" via "$CA6_NAT" dev ca src "$CLIENT_IP6"
+  fi
   ns ns-server ip addr add "$EXEMPT_IP/32" dev lo
   ns ns-server ip route add "$POOL" via "$SA_NAT" dev sa
   ns ns-server ip route add "$INSIDE" via "$SA_NAT" dev sa
@@ -34,6 +40,7 @@ up() {
     ns "ns-$n" sysctl -qw net.ipv4.conf.all.rp_filter=0 net.ipv4.conf.default.rp_filter=0
   done
   for n in nat nat2; do ns "ns-$n" sysctl -qw net.ipv4.ip_forward=1; done
+  [ "$IPV6" = 1 ] && for n in nat nat2; do ns "ns-$n" sysctl -qw net.ipv6.conf.all.forwarding=1; done
   log "network up"
 }
 

@@ -6,6 +6,7 @@ pub mod ipv4;
 pub mod ipv6;
 pub mod l4;
 pub mod mss;
+pub mod nat64;
 
 use std::fmt;
 
@@ -17,6 +18,8 @@ pub enum Error {
     Version,
     Length,
     Fragment,
+    Unsupported,
+    HopLimit,
 }
 
 impl fmt::Display for Error {
@@ -27,6 +30,8 @@ impl fmt::Display for Error {
             Error::Version => "unexpected ip version",
             Error::Length => "inconsistent length fields",
             Error::Fragment => "fragments are not supported",
+            Error::Unsupported => "unsupported protocol",
+            Error::HopLimit => "hop limit exhausted",
         })
     }
 }

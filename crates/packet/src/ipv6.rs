@@ -1,5 +1,6 @@
 use std::net::Ipv6Addr;
 
+use crate::l4::{self, Tcp};
 use crate::{checksum, Error};
 
 pub struct Ipv6<'a>(&'a [u8]);
@@ -34,6 +35,14 @@ impl<'a> Ipv6<'a> {
     // Handed back everything after the fixed header.
     pub fn payload(&self) -> &'a [u8] {
         &self.0[40..]
+    }
+    // Pulled the port pair, or the echo id, from the upper layer.
+    pub fn ports(&self) -> Option<(u16, u16)> {
+        l4::ports(self.next_header(), self.payload())
+    }
+    // Read TCP flags when the packet carried TCP.
+    pub fn tcp_flags(&self) -> Option<u8> {
+        (self.next_header() == crate::ipv4::TCP).then(|| Tcp::parse(self.payload()).ok().map(|t| t.flags())).flatten()
     }
     // Checked the upper layer checksum against the IPv6 pseudo header.
     pub fn l4_checksum_ok(&self) -> bool {

@@ -1,16 +1,17 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::net::SocketAddrV4;
+use std::net::{SocketAddr, SocketAddrV4};
 use std::time::Duration;
 
 use crate::reflect::TcpState;
 
 pub type Id = u64;
-type Fwd = (u8, SocketAddrV4, SocketAddrV4);
+type Fwd = (u8, SocketAddr, SocketAddrV4);
+type Rev = (u8, SocketAddrV4, SocketAddrV4);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Mapping {
     pub proto: u8,
-    pub local: SocketAddrV4,
+    pub local: SocketAddr,
     pub global: SocketAddrV4,
     pub remote: SocketAddrV4,
     pub state: TcpState,
@@ -20,7 +21,7 @@ pub struct Mapping {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Delta {
     Upsert { mapping: Mapping, ttl: Duration },
-    Remove { proto: u8, local: SocketAddrV4, remote: SocketAddrV4 },
+    Remove { proto: u8, local: SocketAddr, remote: SocketAddrV4 },
 }
 
 #[derive(Default)]
@@ -28,7 +29,7 @@ pub struct Table {
     next: Id,
     items: HashMap<Id, Mapping>,
     fwd: HashMap<Fwd, Id>,
-    rev: HashMap<Fwd, Id>,
+    rev: HashMap<Rev, Id>,
     deadlines: BTreeSet<(Duration, Id)>,
     dirty: HashSet<Id>,
     removed: Vec<Delta>,
@@ -44,7 +45,7 @@ impl Table {
         self.items.is_empty()
     }
     // Looked a flow up from the inside view.
-    pub fn by_local(&self, proto: u8, local: SocketAddrV4, remote: SocketAddrV4) -> Option<Id> {
+    pub fn by_local(&self, proto: u8, local: SocketAddr, remote: SocketAddrV4) -> Option<Id> {
         self.fwd.get(&(proto, local, remote)).copied()
     }
     // Looked a flow up from the outside view.

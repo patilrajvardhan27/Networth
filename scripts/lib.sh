@@ -5,6 +5,7 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 [ -f "$ROOT/fixtures/local.env" ] && . "$ROOT/fixtures/local.env"
 BIN=${BIN:-$ROOT/target/debug}
 PIDS=()
+[ -e /proc/net/if_inet6 ] && IPV6=1 || IPV6=0
 
 # Printed a timestamped progress line.
 log() { echo "[$(date +%T)] $*"; }
@@ -34,10 +35,20 @@ nat_routes() {
   ns "$n" ip route add "$EXEMPT_NET" via "$server_gw" table 100
 }
 
+# Routed the NAT64 prefix into the translator and the IPv6 client back out of it.
+nat64_routes() {
+  [ "$IPV6" = 1 ] || return 0
+  ns "$1" ip -6 route add "$NAT64_PREFIX" dev in0
+  ns "$1" ip -6 route add "$CLIENT_IP6/128" via "$CA6_CLIENT" dev na-c
+}
+
+# Turned NAT64 on only where the kernel has IPv6.
+[ "$IPV6" = 1 ] && NAT64_FLAG=1
+
 # Started one translator, optionally as the active or the standby side of a sync pair.
 start_nat() { # ns extra-flags...
   local n=$1; shift
-  bg "$n" "$BIN/natctl" run --pool "$POOL" --mss 1400 \
+  bg "$n" "$BIN/natctl" run --pool "$POOL" --mss 1400 ${NAT64_FLAG:+--nat64} \
     --acl "deny $INSIDE_ALL $INSIDE_ALL" --acl "permit $INSIDE any" "$@"
 }
 
@@ -51,7 +62,7 @@ make_cert() { # dir
 start_pair() {
   start_nat ns-nat --sync-peer "$SYNC_B:$SYNC_PORT" "$@"
   start_nat ns-nat2 --sync-listen "$SYNC_B:$SYNC_PORT"
-  nat_routes ns-nat "$CA_CLIENT" "$SA_SERVER" && nat_routes ns-nat2 "$CB_CLIENT" "$SB_SERVER"
+  nat_routes ns-nat "$CA_CLIENT" "$SA_SERVER" && nat_routes ns-nat2 "$CB_CLIENT" "$SB_SERVER" && nat64_routes ns-nat
 }
 
 # Started every server the tests and the demo talk to on the far side.

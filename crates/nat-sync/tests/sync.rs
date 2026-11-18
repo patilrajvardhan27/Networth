@@ -42,3 +42,21 @@ async fn standby_translates_flows_it_never_saw() {
     assert_eq!((ip.dst(), ip.ports().unwrap().1), (HOST, 5000));
     assert!(ip.l4_ok());
 }
+
+// Round tripped an IPv6 inside address and a removal through the wire format.
+#[test]
+fn codec_carries_both_families() {
+    use nat_core::reflect::TcpState;
+    use nat_core::{Delta, Mapping};
+    use nat_sync::codec::{decode, encode};
+    let local = "[2001:db8:10::2]:5000".parse().unwrap();
+    let (global, remote) = ("198.51.100.1:5000".parse().unwrap(), "203.0.113.9:80".parse().unwrap());
+    let mapping = Mapping { proto: 6, local, global, remote, state: TcpState::Established, expires: Duration::ZERO };
+    let deltas = vec![
+        Delta::Upsert { mapping, ttl: Duration::from_secs(30) },
+        Delta::Remove { proto: 17, local: "172.16.10.2:9".parse().unwrap(), remote },
+    ];
+    let wire = encode(&deltas);
+    assert_eq!(decode(&wire[0]), Some(deltas));
+    assert_eq!(decode(&wire[0][..wire[0].len() - 3]), None);
+}

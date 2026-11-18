@@ -28,7 +28,7 @@ def udp_echo(host, port):
 
 # Sent one datagram and printed the reply, or exited non-zero on silence.
 def udp_client(host, port):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock = socket.socket(socket.AF_INET6 if ":" in host else socket.AF_INET, socket.SOCK_DGRAM)
     sock.settimeout(3)
     sock.sendto(b"ping", (host, int(port)))
     print(sock.recv(2048).decode())

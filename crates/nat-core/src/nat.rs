@@ -1,4 +1,4 @@
-use std::net::SocketAddrV4;
+use std::net::{Ipv6Addr, SocketAddr, SocketAddrV4};
 
 use packet::{Ipv4, Side};
 
@@ -15,6 +15,7 @@ pub struct Config {
     pub timeouts: Timeouts,
     pub acl: Acl,
     pub mss: Option<u16>,
+    pub nat64: Option<Ipv6Addr>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,11 +32,11 @@ pub struct Stats {
 }
 
 pub struct Nat<C: Clock> {
-    cfg: Config,
+    pub(crate) cfg: Config,
     table: Table,
     pool: Pool,
     clock: C,
-    stats: Stats,
+    pub(crate) stats: Stats,
 }
 
 impl<C: Clock> Nat<C> {
@@ -78,12 +79,12 @@ impl<C: Clock> Nat<C> {
     // Applied a peer's delta and taught the pool which address its host was given.
     pub fn apply(&mut self, delta: crate::Delta) {
         if let crate::Delta::Upsert { mapping, .. } = &delta {
-            self.pool.adopt(*mapping.local.ip(), *mapping.global.ip());
+            self.pool.adopt(mapping.local.ip(), *mapping.global.ip());
         }
         self.table.apply(delta, self.clock.now());
     }
     // Counted a refusal and handed the reason back.
-    fn reject<T>(&mut self, e: Error) -> Result<T, Error> {
+    pub(crate) fn reject<T>(&mut self, e: Error) -> Result<T, Error> {
         self.stats.dropped += 1;
         Err(e)
     }
@@ -98,15 +99,14 @@ impl<C: Clock> Nat<C> {
         self.table.touch(id, state, self.clock.now() + ttl);
         Ok(Mapping { state, ..m })
     }
-    // Translated a packet leaving the inside, building a mapping when it started a new flow.
-    pub fn outbound(&mut self, buf: &mut [u8]) -> Result<Verdict, Error> {
-        let mut ip = Ipv4::parse(buf)?;
-        let Some((sport, dport)) = ip.ports() else { return self.reject(Error::Unsupported) };
-        let (proto, flags) = (ip.proto(), ip.tcp_flags());
-        if !self.cfg.acl.translates(ip.src(), ip.dst()) {
-            return Ok(Verdict::Bypassed);
-        }
-        let (local, remote) = (SocketAddrV4::new(ip.src(), sport), SocketAddrV4::new(ip.dst(), dport));
+    // Found or built the mapping for an outgoing flow and refreshed it, refusing mid-stream TCP that had no state.
+    pub(crate) fn flow_out(
+        &mut self,
+        proto: u8,
+        local: SocketAddr,
+        remote: SocketAddrV4,
+        flags: Option<u8>,
+    ) -> Result<Mapping, Error> {
         let id = match self.table.by_local(proto, local, remote) {
             Some(id) => id,
             None if flags.is_some_and(|f| f & packet::l4::SYN == 0) => return self.reject(Error::NoMapping),
@@ -118,34 +118,54 @@ impl<C: Clock> Nat<C> {
                 self.table.insert(m)
             }
         };
-        let m = self.refresh(id, Dir::Out, flags)?;
-        ip.set_addr(Side::Src, *m.global.ip());
-        ip.set_port(Side::Src, m.global.port());
-        if let Some(max) = self.cfg.mss {
-            ip.clamp_mss(max);
-        }
-        self.stats.outbound += 1;
-        Ok(Verdict::Translated)
+        self.refresh(id, Dir::Out, flags)
     }
-    // Translated a packet coming back from the outside, only when a live flow already owned it.
-    pub fn inbound(&mut self, buf: &mut [u8]) -> Result<Verdict, Error> {
-        let mut ip = Ipv4::parse(buf)?;
+    // Matched a returning packet to a live mapping and refreshed it, refusing anything the filter did not allow.
+    pub(crate) fn flow_in(&mut self, ip: &Ipv4) -> Result<Mapping, Error> {
         if !self.pool.contains(ip.dst()) {
             return self.reject(Error::NotForPool);
         }
         let Some((sport, dport)) = ip.ports() else { return self.reject(Error::Unsupported) };
         let (global, remote) = (SocketAddrV4::new(ip.dst(), dport), SocketAddrV4::new(ip.src(), sport));
         let Some(id) = self.table.by_global(ip.proto(), global, remote) else { return self.reject(Error::NoMapping) };
-        let m = match self.refresh(id, Dir::In, ip.tcp_flags()) {
-            Ok(m) => m,
-            Err(e) => return self.reject(e),
-        };
-        ip.set_addr(Side::Dst, *m.local.ip());
-        ip.set_port(Side::Dst, m.local.port());
+        self.refresh(id, Dir::In, ip.tcp_flags()).or_else(|e| self.reject(e))
+    }
+    // Rewrote an outgoing IPv4 packet to its global source and clamped the MSS.
+    pub(crate) fn rewrite_out(&self, ip: &mut Ipv4, m: &Mapping) {
+        ip.set_addr(Side::Src, *m.global.ip());
+        ip.set_port(Side::Src, m.global.port());
+        if let Some(max) = self.cfg.mss {
+            ip.clamp_mss(max);
+        }
+    }
+    // Translated a packet leaving the inside, building a mapping when it started a new flow.
+    pub fn outbound(&mut self, buf: &mut [u8]) -> Result<Verdict, Error> {
+        let mut ip = Ipv4::parse(buf)?;
+        let Some((sport, dport)) = ip.ports() else { return self.reject(Error::Unsupported) };
+        if !self.cfg.acl.translates(ip.src(), ip.dst()) {
+            return Ok(Verdict::Bypassed);
+        }
+        let local = SocketAddr::V4(SocketAddrV4::new(ip.src(), sport));
+        let m = self.flow_out(ip.proto(), local, SocketAddrV4::new(ip.dst(), dport), ip.tcp_flags())?;
+        self.rewrite_out(&mut ip, &m);
+        self.stats.outbound += 1;
+        Ok(Verdict::Translated)
+    }
+    // Translated a packet coming back from the outside, only when a live flow already owned it.
+    pub fn inbound(&mut self, buf: &mut [u8]) -> Result<Verdict, Error> {
+        let mut ip = Ipv4::parse(buf)?;
+        let m = self.flow_in(&ip)?;
+        let SocketAddr::V4(local) = m.local else { return self.reject(Error::Unsupported) };
+        self.rewrite_in(&mut ip, local);
+        Ok(Verdict::Translated)
+    }
+    // Rewrote a returning IPv4 packet to its inside destination and clamped the MSS.
+    pub(crate) fn rewrite_in(&mut self, ip: &mut Ipv4, local: SocketAddrV4) {
+        ip.set_addr(Side::Dst, *local.ip());
+        ip.set_port(Side::Dst, local.port());
         if let Some(max) = self.cfg.mss {
             ip.clamp_mss(max);
         }
         self.stats.inbound += 1;
-        Ok(Verdict::Translated)
     }
 }

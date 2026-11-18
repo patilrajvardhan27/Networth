@@ -1,3 +1,4 @@
+use crate::ipv4::{ICMP, TCP, UDP};
 use crate::Error;
 
 pub const FIN: u8 = 0x01;
@@ -6,6 +7,23 @@ pub const RST: u8 = 0x04;
 pub const ACK: u8 = 0x10;
 pub const ECHO_REPLY: u8 = 0;
 pub const ECHO_REQUEST: u8 = 8;
+pub const ICMPV6: u8 = 58;
+pub const ECHO_REQUEST6: u8 = 128;
+pub const ECHO_REPLY6: u8 = 129;
+
+// Pulled a port pair from transport bytes, letting an echo id play the port on whichever side it sat.
+pub fn ports(proto: u8, l4: &[u8]) -> Option<(u16, u16)> {
+    match proto {
+        TCP => Tcp::parse(l4).ok().map(|t| (t.src(), t.dst())),
+        UDP => Udp::parse(l4).ok().map(|u| (u.src(), u.dst())),
+        ICMP | ICMPV6 => Icmp::parse(l4).ok().and_then(|i| match (proto, i.kind()) {
+            (ICMP, ECHO_REQUEST) | (ICMPV6, ECHO_REQUEST6) => Some((i.id(), 0)),
+            (ICMP, ECHO_REPLY) | (ICMPV6, ECHO_REPLY6) => Some((0, i.id())),
+            _ => None,
+        }),
+        _ => None,
+    }
+}
 
 // Read a big-endian u16 from two spots in a header.
 fn be16(b: &[u8], at: usize) -> u16 {

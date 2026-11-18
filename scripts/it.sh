@@ -32,6 +32,15 @@ mss_is_clamped() {
 # Sent to an inside prefix the ACL exempts and expected the server to see the untranslated source.
 acl_bypass_skips_translation() { ns ns-client python3 "$PROBE" udp-client "$EXEMPT_IP" "$UDP_PORT" | grep -Eq "^172\.16\.10\.2:"; }
 
+# Fetched a page from an IPv6-only client through the NAT64 prefix and expected a pool address at the server.
+nat64_tcp() { ns ns-client curl -g -6 -fsS --max-time 5 "http://[$SERVER_IP6]:$HTTP_PORT/" | grep -Eq "peer=198\.51\.100\.[0-9]+:"; }
+
+# Sent a datagram from the IPv6 client and expected the server to see a pool address.
+nat64_udp() { ns ns-client python3 "$PROBE" udp-client "$SERVER_IP6" "$UDP_PORT" | grep -Eq "^198\.51\.100\."; }
+
+# Pinged the IPv4 server from the IPv6 client and expected two replies.
+nat64_icmp() { ns ns-client ping -6 -c 2 -W 2 "$SERVER_IP6" >/dev/null; }
+
 # Pinged the server and expected two replies.
 icmp_through_nat() { ns ns-client ping -c 2 -W 2 "$SERVER_IP" >/dev/null; }
 
@@ -68,6 +77,13 @@ check "udp through nat" udp_through_nat
 check "icmp through nat" icmp_through_nat
 check "mss is clamped on the handshake" mss_is_clamped
 check "acl exemption skips translation" acl_bypass_skips_translation
+if [ "$IPV6" = 1 ]; then
+  check "nat64 tcp from an ipv6 only client" nat64_tcp
+  check "nat64 udp from an ipv6 only client" nat64_udp
+  check "nat64 icmp from an ipv6 only client" nat64_icmp
+else
+  log "SKIP nat64 checks, this kernel has ipv6 disabled"
+fi
 check "tls through nat" tls_through_nat
 check "dns through nat" dns_through_nat
 check "natctl show lists the flows" show_lists_pool

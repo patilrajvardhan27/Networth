@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::net::{Ipv4Addr, SocketAddrV4};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::ops::RangeInclusive;
 
 use crate::cidr::Cidr;
@@ -7,7 +7,7 @@ use crate::table::Table;
 
 pub struct Pool {
     addrs: Vec<Ipv4Addr>,
-    paired: HashMap<Ipv4Addr, usize>,
+    paired: HashMap<IpAddr, usize>,
     next: usize,
 }
 
@@ -38,7 +38,7 @@ impl Pool {
         self.addrs.is_empty()
     }
     // Remembered which pool address an inside host had been given, as a standby learned from its peer.
-    pub fn adopt(&mut self, local: Ipv4Addr, global: Ipv4Addr) {
+    pub fn adopt(&mut self, local: IpAddr, global: Ipv4Addr) {
         if let Some(i) = self.addrs.iter().position(|a| *a == global) {
             self.paired.insert(local, i);
         }
@@ -59,13 +59,13 @@ impl Pool {
         &mut self,
         table: &Table,
         proto: u8,
-        local: SocketAddrV4,
+        local: SocketAddr,
         remote: SocketAddrV4,
     ) -> Option<SocketAddrV4> {
         if self.addrs.is_empty() {
             return None;
         }
-        let start = *self.paired.entry(*local.ip()).or_insert_with(|| {
+        let start = *self.paired.entry(local.ip()).or_insert_with(|| {
             let i = self.next;
             self.next = (i + 1) % self.addrs.len();
             i
@@ -73,7 +73,7 @@ impl Pool {
         for i in 0..self.addrs.len() {
             let idx = (start + i) % self.addrs.len();
             if let Some(port) = Self::pick_port(table, proto, self.addrs[idx], local.port(), remote) {
-                self.paired.insert(*local.ip(), idx);
+                self.paired.insert(local.ip(), idx);
                 return Some(SocketAddrV4::new(self.addrs[idx], port));
             }
         }

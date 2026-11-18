@@ -4,6 +4,7 @@ pub mod acl;
 pub mod cidr;
 pub mod clock;
 pub mod nat;
+pub mod nat64;
 pub mod pat;
 pub mod reflect;
 pub mod table;

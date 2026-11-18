@@ -1,6 +1,6 @@
 use std::net::Ipv4Addr;
 
-use crate::l4::{Icmp, Tcp, Udp, ECHO_REPLY, ECHO_REQUEST};
+use crate::l4::{self, Tcp};
 use crate::{checksum, Error};
 
 pub const ICMP: u8 = 1;
@@ -83,18 +83,9 @@ impl<'a> Ipv4<'a> {
         }
         Tcp::parse(self.l4()).ok().map(|t| t.flags())
     }
-    // Pulled a port pair, letting an ICMP echo id play the port on whichever side it sat.
+    // Pulled the port pair, or the echo id on whichever side it sat.
     pub fn ports(&self) -> Option<(u16, u16)> {
-        match self.proto() {
-            TCP => Tcp::parse(self.l4()).ok().map(|t| (t.src(), t.dst())),
-            UDP => Udp::parse(self.l4()).ok().map(|u| (u.src(), u.dst())),
-            ICMP => Icmp::parse(self.l4()).ok().and_then(|i| match i.kind() {
-                ECHO_REQUEST => Some((i.id(), 0)),
-                ECHO_REPLY => Some((0, i.id())),
-                _ => None,
-            }),
-            _ => None,
-        }
+        l4::ports(self.proto(), self.l4())
     }
     // Located the transport checksum field, if this protocol had one and it fit.
     fn l4_ck_at(&self) -> Option<usize> {

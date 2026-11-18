@@ -38,11 +38,14 @@ pub fn pseudo_v6(src: Ipv6Addr, dst: Ipv6Addr, next: u8, len: usize) -> u64 {
     sum(&src.octets()) + sum(&dst.octets()) + u64::from(next) + len as u64
 }
 
-// Patched a checksum for swapped words the RFC 1624 way, never rescanning the packet.
+// Patched a checksum for swapped words, which could differ in count, the RFC 1624 way.
 pub fn update(ck: u16, old: &[u8], new: &[u8]) -> u16 {
     let mut acc = u64::from(!ck);
-    for (o, n) in old.as_chunks::<2>().0.iter().zip(new.as_chunks::<2>().0) {
-        acc += u64::from(!u16::from_be_bytes(*o)) + u64::from(u16::from_be_bytes(*n));
+    for o in old.as_chunks::<2>().0 {
+        acc += u64::from(!u16::from_be_bytes(*o));
+    }
+    for n in new.as_chunks::<2>().0 {
+        acc += u64::from(u16::from_be_bytes(*n));
     }
     fold(acc)
 }

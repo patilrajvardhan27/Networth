@@ -41,6 +41,8 @@ pub struct RunArgs {
     pub out_addr: Ipv4Addr,
     #[arg(long, help = "Clamp the TCP MSS on SYN packets to this ceiling")]
     pub mss: Option<u16>,
+    #[arg(long, help = "Translate IPv6 clients to IPv4 through the 64:ff9b::/96 prefix")]
+    pub nat64: bool,
     #[arg(long, default_value = "127.0.0.1:8080")]
     pub admin: SocketAddr,
     #[arg(long, help = "Push table deltas to a standby at this address")]
