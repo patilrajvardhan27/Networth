@@ -139,6 +139,9 @@ impl<'a> Ipv4<'a> {
             (_, Side::Src) => self.hl,
             (_, Side::Dst) => self.hl + 2,
         };
+        if self.buf.len() < at + 2 {
+            return;
+        }
         let (old, new) = ([self.buf[at], self.buf[at + 1]], port.to_be_bytes());
         self.patch_l4(&old, &new, false);
         self.buf[at..at + 2].copy_from_slice(&new);

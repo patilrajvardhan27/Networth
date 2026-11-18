@@ -91,3 +91,22 @@ fn fragments_are_rejected() {
     pkt[6] = 0x20;
     assert_eq!(Ipv4::parse(&mut pkt).err(), Some(packet::Error::Fragment));
 }
+
+proptest! {
+    // Fed arbitrary bytes, biased toward valid headers, through every entry point and expected no panic.
+    #[test]
+    fn arbitrary_bytes_never_panic(head in prop_oneof![Just(0x45u8), Just(0x46u8), any::<u8>()], proto in prop_oneof![Just(1u8), Just(6u8), Just(17u8), any::<u8>()],
+                                   tail in proptest::collection::vec(any::<u8>(), 0..80)) {
+        let mut buf = vec![head, 0, 0, 0, 0, 0, 0, 0, 64, proto];
+        buf.extend(tail);
+        let len = buf.len() as u16;
+        buf[2..4].copy_from_slice(&len.to_be_bytes());
+        if let Ok(mut ip) = Ipv4::parse(&mut buf) {
+            let _ = (ip.ports(), ip.tcp_flags(), ip.header_ok(), ip.l4_ok());
+            ip.clamp_mss(1400);
+            ip.set_addr(Side::Src, Ipv4Addr::new(10, 0, 0, 1));
+            ip.set_port(Side::Dst, 4242);
+        }
+        let _ = packet::ipv6::Ipv6::parse(&buf).map(|ip| ip.l4_checksum_ok());
+    }
+}

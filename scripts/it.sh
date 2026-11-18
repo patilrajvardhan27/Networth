@@ -16,13 +16,6 @@ check() { # name command...
   if "$@"; then log "PASS $name"; else log "FAIL $name"; FAILED=1; fi
 }
 
-# Started one translator, optionally as the active or the standby side of a sync pair.
-start_nat() { # ns sync-flag...
-  local n=$1; shift
-  bg "$n" "$BIN/natctl" run --pool "$POOL" --mss 1400 \
-    --acl "deny $INSIDE_ALL $INSIDE_ALL" --acl "permit $INSIDE any" "$@"
-}
-
 # Asked the client for a page and expected the server to see a pool address.
 tcp_through_nat() { ns ns-client curl -fsS --max-time 5 "http://$SERVER_IP:$HTTP_PORT/" | grep -Eq "peer=198\.51\.100\.([1-9]|[12][0-9]|30):"; }
 
@@ -56,20 +49,9 @@ failover_keeps_stream() {
 }
 
 "$ROOT/scripts/netns.sh" up
-openssl req -x509 -newkey rsa:2048 -nodes -keyout "$WORK/key.pem" -out "$WORK/cert.pem" -days 2 \
-  -subj "/CN=nat.test" -addext "subjectAltName=DNS:nat.test" -addext "basicConstraints=CA:FALSE" 2>/dev/null
-
-start_nat ns-nat --sync-peer "$SYNC_B:$SYNC_PORT"
-start_nat ns-nat2 --sync-listen "$SYNC_B:$SYNC_PORT"
-nat_routes ns-nat "$CA_CLIENT" "$SA_SERVER" && nat_routes ns-nat2 "$CB_CLIENT" "$SB_SERVER" || exit 1
-
-bg ns-server python3 "$PROBE" tcp-whoami "$SERVER_IP" "$HTTP_PORT"
-bg ns-server python3 "$PROBE" udp-echo "$SERVER_IP" "$UDP_PORT"
-bg ns-server python3 "$PROBE" stream-server "$SERVER_IP" "$STREAM_PORT"
-bg ns-server python3 "$PROBE" dns-stub 127.0.0.1 5353
-bg ns-server openssl s_server -quiet -www -accept "$SERVER_IP:$TLS_PORT" -cert "$WORK/cert.pem" -key "$WORK/key.pem"
-(ns ns-server env RUST_LOG=dnsfwd=info "$BIN/dnsfwd" --listen "$SERVER_IP:53" --upstream 127.0.0.1:5353 >"$WORK/dnsfwd.log" 2>&1 &)
-sleep 1
+make_cert "$WORK"
+start_pair || exit 1
+start_servers "$WORK"
 
 check "tcp through nat" tcp_through_nat
 check "udp through nat" udp_through_nat
