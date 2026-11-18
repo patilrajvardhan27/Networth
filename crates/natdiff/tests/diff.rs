@@ -95,35 +95,74 @@ fn edit(out: &mut [Vec<u8>], idx: usize, f: impl FnOnce(&mut Ipv4)) {
     f(&mut Ipv4::parse(&mut out[idx]).unwrap());
 }
 
-// Read both capture formats back and expected an honest router to pass with every flow matched.
-#[test]
-fn matching_router_passes_through_both_file_formats() {
-    let inside = inside_traffic();
-    let out = router(&inside);
-    let (pcap, pcapng) = (tmp("in.pcap"), tmp("out.pcapng"));
-    let mut w = PcapWriter::new(File::create(&pcap).unwrap()).unwrap();
-    for (i, p) in inside.iter().enumerate() {
+// Wrote packets to a classic pcap file ten milliseconds apart.
+fn write_pcap(path: &PathBuf, packets: &[Vec<u8>]) {
+    let mut w = PcapWriter::new(File::create(path).unwrap()).unwrap();
+    for (i, p) in packets.iter().enumerate() {
         let data = eth(p);
         w.write_packet(&PcapPacket::new_owned(Duration::from_millis(10 * i as u64), data.len() as u32, data)).unwrap();
     }
-    let mut ng = PcapNgWriter::new(File::create(&pcapng).unwrap()).unwrap();
+}
+
+// Wrote packets to a pcapng file ten milliseconds apart.
+fn write_pcapng(path: &PathBuf, packets: &[Vec<u8>]) {
+    let mut ng = PcapNgWriter::new(File::create(path).unwrap()).unwrap();
     ng.write_pcapng_block(InterfaceDescriptionBlock::new(DataLink::ETHERNET, 0xffff)).unwrap();
-    for (i, p) in out.iter().enumerate() {
+    for (i, p) in packets.iter().enumerate() {
         let data = eth(p);
+        let timestamp = Duration::from_millis(10 * i as u64);
         let block = EnhancedPacketBlock {
             interface_id: 0,
-            timestamp: Duration::from_millis(10 * i as u64),
+            timestamp,
             original_len: data.len() as u32,
             data: Cow::Owned(data),
             options: vec![],
         };
         ng.write_pcapng_block(block).unwrap();
     }
-    drop((w, ng));
+}
+
+// Read both capture formats back and expected an honest router to pass with every flow matched.
+#[test]
+fn matching_router_passes_through_both_file_formats() {
+    let inside = inside_traffic();
+    let (pcap, pcapng) = (tmp("in.pcap"), tmp("out.pcapng"));
+    write_pcap(&pcap, &inside);
+    write_pcapng(&pcapng, &router(&inside));
     let report = compare(&capture::read(&pcap).unwrap(), &capture::read(&pcapng).unwrap(), &options());
     assert_eq!(report.violations, Vec::<String>::new());
     assert_eq!((report.matched, report.unmatched, report.flows), (inside.len(), 0, 5));
     let _ = (std::fs::remove_file(pcap), std::fs::remove_file(pcapng));
+}
+
+// Ran the real binary on capture files and expected exit 0 for an honest router and 1 for a tampered one.
+#[test]
+fn command_line_exit_codes_follow_the_verdict() {
+    let inside = inside_traffic();
+    let mut tampered = router(&inside);
+    Ipv4::parse(&mut tampered[5]).unwrap().set_addr(Side::Src, A);
+    let (a, good, bad) = (tmp("cli-in.pcap"), tmp("cli-good.pcap"), tmp("cli-bad.pcapng"));
+    write_pcap(&a, &inside);
+    write_pcap(&good, &router(&inside));
+    write_pcapng(&bad, &tampered);
+    let run = |outside: &PathBuf| {
+        std::process::Command::new(env!("CARGO_BIN_EXE_natdiff"))
+            .args(["--pool", "198.51.100.0/27", "--mss", "1400"])
+            .args(["--acl", "deny 172.16.0.0/16 172.16.0.0/16", "--acl", "permit 172.16.10.0/24 any"])
+            .arg("--inside")
+            .arg(&a)
+            .arg("--outside")
+            .arg(outside)
+            .output()
+            .unwrap()
+    };
+    let (ok, fail) = (run(&good), run(&bad));
+    assert_eq!(ok.status.code(), Some(0), "{}", String::from_utf8_lossy(&ok.stdout));
+    assert!(String::from_utf8_lossy(&ok.stdout).contains("matched 11"));
+    assert_eq!(fail.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&fail.stdout).contains("VIOLATION"));
+    assert_eq!(run(&tmp("missing.pcap")).status.code(), Some(2));
+    let _ = [a, good, bad].map(std::fs::remove_file);
 }
 
 // Changed a destination and expected the comparison to say so.
