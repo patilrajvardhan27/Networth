@@ -1,4 +1,4 @@
-//! Hand-written packet parsing and RFC 1624 incremental checksum updates.
+// Gathered the hand-written parsers and the RFC 1624 checksum patching.
 
 pub mod build;
 pub mod checksum;

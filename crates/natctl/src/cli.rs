@@ -13,9 +13,9 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Cmd {
-    /// Run the translator on two TUN devices
+    #[command(about = "Run the translator on two TUN devices")]
     Run(Box<RunArgs>),
-    /// Print the translation table like `show ip nat translations`
+    #[command(about = "Print the live translation table")]
     Show(ShowArgs),
 }
 
@@ -29,8 +29,7 @@ pub struct ShowArgs {
 pub struct RunArgs {
     #[arg(long, default_value = "198.51.100.0/27")]
     pub pool: Cidr,
-    /// First match wins, e.g. "deny 172.16.0.0/16 172.16.0.0/16"
-    #[arg(long = "acl")]
+    #[arg(long = "acl", help = "Rule such as \"deny 172.16.0.0/16 172.16.0.0/16\", first match wins")]
     pub acl: Vec<Rule>,
     #[arg(long, default_value = "in0")]
     pub in_dev: String,
@@ -40,16 +39,13 @@ pub struct RunArgs {
     pub out_dev: String,
     #[arg(long, default_value = "10.255.1.1")]
     pub out_addr: Ipv4Addr,
-    /// Clamp the TCP MSS on SYN packets to this ceiling
-    #[arg(long)]
+    #[arg(long, help = "Clamp the TCP MSS on SYN packets to this ceiling")]
     pub mss: Option<u16>,
     #[arg(long, default_value = "127.0.0.1:8080")]
     pub admin: SocketAddr,
-    /// Push table deltas to a standby at this address
-    #[arg(long)]
+    #[arg(long, help = "Push table deltas to a standby at this address")]
     pub sync_peer: Option<SocketAddr>,
-    /// Receive table deltas from the active on this address
-    #[arg(long)]
+    #[arg(long, help = "Receive table deltas from the active at this address")]
     pub sync_listen: Option<SocketAddr>,
     #[arg(long, default_value_t = 86400)]
     pub tcp_timeout: u64,

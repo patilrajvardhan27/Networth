@@ -1,4 +1,4 @@
-//! UDP DNS forwarder that answers repeat questions from a TTL cache.
+// Gathered a forwarder that answered repeat questions from a TTL cache.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;

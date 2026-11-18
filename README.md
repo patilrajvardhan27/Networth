@@ -1,4 +1,4 @@
-# pat-rs
+# Networth
 
 [![ci](https://github.com/patilrajvardhan27/Networth/actions/workflows/ci.yml/badge.svg)](https://github.com/patilrajvardhan27/Networth/actions/workflows/ci.yml)
 
@@ -7,8 +7,6 @@ A stateful NAT/PAT router written in Rust, running in userspace over Linux TUN d
 All addresses are RFC 5737 documentation ranges (`198.51.100.0/27` pool, `172.16.10.0/24` inside, `203.0.113.0/24` outside).
 
 ![natctl console](docs/screenshots/console.png)
-
-**Keywords:** Rust, NAT, PAT, NAPT, SNAT, TUN/TAP, tokio, RFC 1624, RFC 4787, zero-dependency packet parser, property-based testing, network namespaces, active/standby replication, rustls, DNS forwarder, Docker, GitHub Actions, criterion.
 
 ## Layout
 
@@ -28,14 +26,14 @@ fuzz/         cargo-fuzz target for the parser with a seed corpus
 
 ## Lab feature to module
 
-| Lab feature | Module | Behavior |
+| Behavior | Module | Detail |
 |---|---|---|
-| `ip nat inside source list ... pool ... overload` | `nat-core::pat` | Keep the source port when free, otherwise take the next free one in the same port block; each inside host sticks to one pool address |
-| `deny` exemption ahead of `permit` | `nat-core::acl` | First-match ACL evaluated before translation, no match means no translation |
-| Flows survive CE failover | `nat-sync` | Standby applies replicated deltas; kill the active and the stream completes |
-| `ip tcp adjust-mss` | `packet::mss` | Clamp on SYN with an incremental checksum update |
-| `reflect` / `evaluate` | `nat-core::reflect` | Outside hosts cannot initiate or revive a TCP flow |
-| `show ip nat translations` | `natctl show` | Pro, Inside global, Inside local, Outside local, Outside global |
+| Pool-based port address translation with overload | `nat-core::pat` | Keep the source port when free, otherwise take the next free one in the same port block; each inside host sticks to one pool address |
+| Exempting inside-to-inside traffic from translation | `nat-core::acl` | First-match ACL evaluated before translation, no match means no translation |
+| Established flows surviving a router failover | `nat-sync` | Standby applies replicated deltas; kill the active and the stream completes |
+| TCP MSS clamping | `packet::mss` | Clamp on SYN with an incremental checksum update |
+| Stateful inbound filtering | `nat-core::reflect` | Outside hosts cannot initiate or revive a TCP flow |
+| Listing the translation table | `natctl show` | Protocol, inside global, inside local, outside local, outside global |
 
 ## Architecture
 
@@ -69,11 +67,11 @@ sudo target/debug/natctl run --pool 198.51.100.0/27 \
 target/debug/natctl show
 ```
 
-Docker:
+Docker (the console listens on the container address and is published on the host loopback only):
 
 ```bash
 docker build -t natctl .
-docker run --cap-add=NET_ADMIN --device /dev/net/tun -p 8080:8080 natctl run --admin 0.0.0.0:8080
+docker run --cap-add=NET_ADMIN --device /dev/net/tun -p 127.0.0.1:8080:8080 natctl run --admin 0.0.0.0:8080
 ```
 
 ![pool view](docs/screenshots/pool.png)

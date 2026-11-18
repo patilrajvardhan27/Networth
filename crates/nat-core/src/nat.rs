@@ -121,7 +121,9 @@ impl<C: Clock> Nat<C> {
         let m = self.refresh(id, Dir::Out, flags)?;
         ip.set_addr(Side::Src, *m.global.ip());
         ip.set_port(Side::Src, m.global.port());
-        self.cfg.mss.map(|max| ip.clamp_mss(max));
+        if let Some(max) = self.cfg.mss {
+            ip.clamp_mss(max);
+        }
         self.stats.outbound += 1;
         Ok(Verdict::Translated)
     }
@@ -140,7 +142,9 @@ impl<C: Clock> Nat<C> {
         };
         ip.set_addr(Side::Dst, *m.local.ip());
         ip.set_port(Side::Dst, m.local.port());
-        self.cfg.mss.map(|max| ip.clamp_mss(max));
+        if let Some(max) = self.cfg.mss {
+            ip.clamp_mss(max);
+        }
         self.stats.inbound += 1;
         Ok(Verdict::Translated)
     }

@@ -1,4 +1,4 @@
-//! Pure stateful NAT: forward and reverse maps, PAT allocation, ACL and TCP state tracking.
+// Gathered the pure NAT state machine: maps, PAT allocation, ACL and TCP state tracking.
 
 pub mod acl;
 pub mod cidr;

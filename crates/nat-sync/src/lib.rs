@@ -1,4 +1,4 @@
-//! Active/standby replication of NAT mappings over UDP.
+// Gathered the active and standby replication of mappings over UDP.
 
 pub mod codec;
 
