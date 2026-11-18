@@ -1,0 +1,13 @@
+[package]
+name = "natdiff"
+description = "Replays an inside-side capture through the NAT and checks the real router's output has the same structure"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+nat-core.workspace = true
+packet.workspace = true
+pcap-file = "2"
+clap.workspace = true
