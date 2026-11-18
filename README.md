@@ -8,23 +8,85 @@ All addresses are RFC 5737 documentation ranges (`198.51.100.0/27` pool, `172.16
 
 ![natctl console](docs/screenshots/console.png)
 
-## Layout
+## System architecture
 
-```
-crates/
-  packet/     hand-written IPv4/IPv6/TCP/UDP/ICMP parsing, RFC 1624 checksum patching, MSS clamp (no dependencies)
-  nat-core/   pure state machine: PAT pool, forward/reverse maps, BTreeSet expiry, ACL, TCP state filter, injected clock
-  nat-sync/   UDP replication of table deltas between an active and a standby instance
-  natctl/     tokio binary: two TUN devices, admin HTTP console, `natctl show`
-  dnsfwd/     UDP DNS forwarder with a TTL cache (hickory-proto for parsing)
-  tlsprobe/   rustls client used to prove TLS survives the NAT
-dashboard/    pixel-art console served by natctl (plain HTML, CSS and JS)
-scripts/      network namespace topology, integration suite, demo and screenshot capture
-fixtures/     shared addresses and ports for every script
-fuzz/         cargo-fuzz target for the parser with a seed corpus
+```mermaid
+flowchart LR
+  client["ns-client<br/>172.16.10.0/24"] -->|kernel route| in0["in0 TUN"]
+  subgraph natctl["natctl (tokio)"]
+    pumpO["outbound pump"]
+    pumpI["inbound pump"]
+    core["nat-core<br/>ACL, PAT, TCP state<br/>forward and reverse maps"]
+    sweep["expiry sweeper"]
+    admin["admin console<br/>HTTP"]
+    sync["nat-sync<br/>UDP deltas"]
+  end
+  in0 --> pumpO --> core
+  core --> pumpO
+  pumpO --> out0["out0 TUN"]
+  out0 --> pumpI --> core
+  pumpI --> in0
+  out0 -->|kernel route| server["ns-server<br/>203.0.113.0/24"]
+  sweep --> core
+  core --> admin --> ui["dashboard and natctl show"]
+  core <--> sync -->|UDP| standby["standby natctl"]
+  pkt["packet crate<br/>parsers and RFC 1624"] -.-> core
 ```
 
-## Lab feature to module
+Outbound packets are routed to `in0`, rewritten, and written to `out0`. A route for the pool prefix points at `out0`, so replies come back through `natctl` and are reverse-translated onto `in0`. Policy routing (`ip rule iif out0`) keeps translated packets from looping. `nat-core` performs no I/O and takes an injected clock, so every behavior is unit-testable.
+
+| Crate | Role |
+|---|---|
+| `packet` | Hand-written IPv4/IPv6/TCP/UDP/ICMP parsing, RFC 1624 checksum patching, MSS clamp, no dependencies |
+| `nat-core` | Pure state machine: PAT pool, forward and reverse maps, `BTreeSet` expiry, ACL, TCP state filter |
+| `nat-sync` | UDP replication of table deltas between an active and a standby instance |
+| `natctl` | tokio binary: two TUN devices, admin HTTP console, `natctl show` |
+| `dnsfwd` | UDP DNS forwarder with a TTL cache and a bounded hand-written wire parser |
+| `tlsprobe` | rustls client that proves TLS survives the NAT |
+
+Supporting folders: `dashboard/` (the pixel-art console), `scripts/` (namespace topology, integration suite, demo), `fixtures/` (shared addresses), `fuzz/` (parser fuzz target and corpus).
+
+### Packet lifecycle
+
+```mermaid
+sequenceDiagram
+  participant C as Client 172.16.10.2
+  participant N as natctl
+  participant S as Server 203.0.113.9
+  C->>N: SYN 172.16.10.2:5000 to 203.0.113.9:443
+  Note over N: ACL permits, pool gives 198.51.100.1:5000, MSS clamped
+  N->>S: SYN 198.51.100.1:5000 to 203.0.113.9:443
+  S->>N: SYN-ACK to 198.51.100.1:5000
+  Note over N: state moves from syn-sent to established
+  N->>C: SYN-ACK to 172.16.10.2:5000
+  S->>N: unsolicited SYN to 198.51.100.1:5000
+  Note over N: dropped, outsiders cannot initiate
+```
+
+### Test network
+
+```mermaid
+flowchart LR
+  subgraph C["ns-client"]
+    c["172.16.10.2"]
+  end
+  subgraph A["ns-nat (active)"]
+    a["natctl"]
+  end
+  subgraph B["ns-nat2 (standby)"]
+    b["natctl"]
+  end
+  subgraph S["ns-server"]
+    s["203.0.113.9<br/>HTTP, UDP echo, TLS, DNS"]
+  end
+  c ---|veth| a
+  c -.->|veth after failover| b
+  a ---|veth| s
+  b -.->|veth after failover| s
+  a ==>|UDP table deltas| b
+```
+
+## Behavior to module
 
 | Behavior | Module | Detail |
 |---|---|---|
@@ -35,19 +97,38 @@ fuzz/         cargo-fuzz target for the parser with a seed corpus
 | Stateful inbound filtering | `nat-core::reflect` | Outside hosts cannot initiate or revive a TCP flow |
 | Listing the translation table | `natctl show` | Protocol, inside global, inside local, outside local, outside global |
 
-## Architecture
+## User interfaces
+
+The console is served by `natctl` itself from embedded assets and polls a read-only JSON API every 1.5 seconds.
+
+**Translations** (live table, same columns as the CLI)
+
+![translations](docs/screenshots/translations.png)
+
+**Pool** (flows per pool address)
+
+![pool](docs/screenshots/pool.png)
+
+**Timeouts** (active configuration)
+
+![timeouts](docs/screenshots/timeouts.png)
+
+**Phone layout**
+
+<img src="docs/screenshots/mobile.png" alt="phone layout" width="280">
+
+**CLI** (`natctl show`, captured from the same run)
 
 ```
- ns-client ──► kernel ──► in0 ──► natctl (outbound) ──► out0 ──► kernel ──► ns-server
- ns-client ◄── kernel ◄── in0 ◄── natctl (inbound)  ◄── out0 ◄── kernel ◄── ns-server
-                                     │
-                         nat-core: Table (fwd + rev maps, deadlines)
-                                     │ deltas over UDP
-                                     ▼
-                              standby natctl
+Pro  Inside global           Inside local            Outside local           Outside global
+icmp 198.51.100.1:10208      172.16.10.2:10208       203.0.113.9:0           203.0.113.9:0
+tcp  198.51.100.1:35586      172.16.10.2:35586       203.0.113.9:9000        203.0.113.9:9000
+tcp  198.51.100.1:35842      172.16.10.2:35842       203.0.113.9:8000        203.0.113.9:8000
+udp  198.51.100.1:36093      172.16.10.2:36093       203.0.113.9:7007        203.0.113.9:7007
+udp  198.51.100.1:44469      172.16.10.2:44469       203.0.113.9:53          203.0.113.9:53
+tcp  198.51.100.2:58292      172.16.10.3:58292       203.0.113.9:8000        203.0.113.9:8000
+tcp  198.51.100.3:45806      172.16.10.4:45806       203.0.113.9:8000        203.0.113.9:8000
 ```
-
-Outbound packets are routed to `in0`, rewritten, and written to `out0`. A route for the pool prefix points at `out0`, so replies return through `natctl` and are reverse-translated onto `in0`. Policy routing (`ip rule iif out0`) keeps translated packets from looping.
 
 ## Run it
 
@@ -76,18 +157,16 @@ docker build -t natctl .
 docker run --cap-add=NET_ADMIN --device /dev/net/tun -p 127.0.0.1:8080:8080 natctl run --admin 0.0.0.0:8080
 ```
 
-![pool view](docs/screenshots/pool.png)
-
 ## Testing
 
 | Layer | What it checks |
 |---|---|
-| Unit | Translation table, port allocation, expiry, pool exhaustion, ACL order, TCP state |
+| Unit | Translation table, port allocation, expiry, pool exhaustion, ACL order, TCP state, DNS cache |
 | `proptest` | Incremental checksums equal a full recompute after rewriting addresses and ports; `etherparse` acts as an independent oracle; arbitrary bytes never panic the parser |
-| Netns integration | curl, UDP echo, ping, rustls handshake and a DNS query through the NAT, plus a mid-transfer failover |
-| Failover control | The same failover with replication disabled fails, so the pass is not accidental |
-| `cargo-fuzz` | `fuzz/` target and seed corpus, run locally on nightly (`cargo +nightly fuzz run parse`), not in CI |
-| CI | `cargo fmt --check`, `clippy -D warnings`, `cargo test`, `cargo-deny`, namespace job under `sudo`, Docker build |
+| Netns integration | curl, UDP echo, ping, rustls handshake, a DNS query, MSS clamping, the ACL exemption and a mid-transfer failover, all through the NAT |
+| Controls | The same suite with replication, the MSS clamp or the `deny` rule removed fails the matching check, so the passes are not accidental |
+| `cargo-fuzz` | `fuzz/` target and committed corpus; a 60 second local run executed 8.7 million inputs with no crash (`cargo +nightly fuzz run parse`), not run in CI |
+| CI | `cargo fmt --check`, `clippy -D warnings`, `cargo test`, `cargo-deny`, the namespace job under `sudo`, and a Docker build |
 
 ## Benchmark
 
@@ -108,6 +187,7 @@ End-to-end throughput through TUN devices is bounded by syscalls and was not ben
 - ICMP is translated for echo only; ICMP error messages are not translated.
 - IPv4 only for translation; NAT64 is not implemented. The IPv6 parser is read-only.
 - Default timeouts (TCP 86400 s, UDP 300 s, DNS/SYN/FIN-RST/ICMP 60 s) match the documented Cisco IOS NAT defaults. Firewall platforms such as ASA use different values; every timeout is a `natctl run` flag.
+- Failover relies on routing to move traffic to the standby; there is no virtual IP.
 - Replication is best effort UDP with a 200 ms beat; a flow created within the last beat before a failover can be lost.
 - The admin console is unauthenticated and read-only; it binds to loopback by default.
 

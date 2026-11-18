@@ -34,6 +34,7 @@ log "console ready at http://192.0.2.22:8080 (Ctrl-C to stop)"
 if [ "${1:-}" = "--shots" ]; then
   sleep 1
   ns ns-nat node "$ROOT/scripts/screenshot.js" "http://192.0.2.22:8080" "$ROOT/docs/screenshots"
+  ns ns-nat "$BIN/natctl" show --admin 192.0.2.22:8080
 else
   while sleep 5; do traffic; done
 fi
