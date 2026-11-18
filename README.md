@@ -59,6 +59,8 @@ sudo scripts/it.sh        # full namespace suite
 sudo scripts/demo.sh      # live demo, console at http://192.0.2.22:8080
 ```
 
+To rehearse with other addressing privately, put overrides in `fixtures/local.env` (gitignored); the scripts source it after `fixtures/topology.env`.
+
 Standalone:
 
 ```bash
@@ -105,7 +107,7 @@ End-to-end throughput through TUN devices is bounded by syscalls and was not ben
 - No fragment reassembly; fragments are dropped.
 - ICMP is translated for echo only; ICMP error messages are not translated.
 - IPv4 only for translation; NAT64 is not implemented. The IPv6 parser is read-only.
-- Default timeouts (TCP 86400 s, UDP 300 s, DNS/SYN/FIN-RST/ICMP 60 s) follow common IOS defaults and should be checked against the vendor docs.
+- Default timeouts (TCP 86400 s, UDP 300 s, DNS/SYN/FIN-RST/ICMP 60 s) match the documented Cisco IOS NAT defaults. Firewall platforms such as ASA use different values; every timeout is a `natctl run` flag.
 - Replication is best effort UDP with a 200 ms beat; a flow created within the last beat before a failover can be lost.
 - The admin console is unauthenticated and read-only; it binds to loopback by default.
 

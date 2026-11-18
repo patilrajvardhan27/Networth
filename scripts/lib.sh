@@ -2,6 +2,7 @@
 # Shared helpers for the namespace scripts, sourced rather than run.
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$ROOT/fixtures/topology.env"
+[ -f "$ROOT/fixtures/local.env" ] && . "$ROOT/fixtures/local.env"
 BIN=${BIN:-$ROOT/target/debug}
 PIDS=()
 
